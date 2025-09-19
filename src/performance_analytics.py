@@ -72,6 +72,28 @@ class PerformanceAnalyzer:
 
         return transformed_df
     
+    def calculate_max_drawdown(self, prices):
+        '''
+        Calculating maximum consecutive peak-to-trough decline.
+        '''
+
+        if len(prices) == 0:
+            return 0
+
+        peak = prices.iloc[0]
+        max_drawdown = 0
+
+        for price in prices:
+            if price > peak:
+                peak = price
+
+        current_drawdown = (price - peak) / peak
+
+        if current_drawdown < max_drawdown:
+            max_drawdown = current_drawdown
+
+        return max_drawdown * 100
+    
     def compare_performance(self, symbols: list, start_date, end_date, window=30, visualization=False):
         '''
         Compare multiple symbols across key performance metrics.
@@ -116,3 +138,208 @@ class PerformanceAnalyzer:
             self.create_comparison_charts(ticker_data, comparison_df)
         
         return comparison_df, ticker_data
+    
+    # Visualisation below
+    def create_comparison_charts(self, ticker_data, summary_df):
+        """
+        Create comprehensive visualization comparing multiple stocks
+        
+        Args:
+            ticker_data: Dict with ticker -> DataFrame of performance metrics
+            summary_df: Summary comparison DataFrame
+        """
+        # Set up the plotting style
+        plt.style.use('default')
+        sns.set_palette("husl")
+        
+        # Create figure with subplots
+        fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+        fig.suptitle('Stock Performance Comparison Analysis', fontsize=16, fontweight='bold')
+        
+        # Chart 1: Normalized Price Performance (Top Left)
+        self.create_normalized_performance_chart(ticker_data, axes[0, 0])
+        
+        # Chart 2: Risk-Return Scatter Plot (Top Right)
+        self.create_risk_return_scatter(summary_df, axes[0, 1])
+        
+        # Chart 3: Rolling Sharpe Ratios (Bottom Left)
+        self.create_rolling_sharpe_chart(ticker_data, axes[1, 0])
+        
+        # Chart 4: Performance Metrics Comparison (Bottom Right)
+        self.create_metrics_comparison_chart(summary_df, axes[1, 1])
+        
+        plt.tight_layout()
+        plt.show()
+    
+    def create_normalized_performance_chart(self, ticker_data, ax):
+        """
+        Chart 1: Normalized price performance (all start at 100)
+        Shows which stock had the best overall performance
+        """
+        for ticker, data in ticker_data.items():
+            clean_data = data.dropna()
+            if len(clean_data) == 0:
+                continue
+                
+            # Normalize prices to start at 100
+            normalized_prices = (clean_data['Close'] / clean_data['Close'].iloc[0]) * 100
+            
+            ax.plot(normalized_prices.index, normalized_prices, 
+                    linewidth=2, label=ticker, alpha=0.8)
+        
+        ax.set_title('Normalized Price Performance\n(Starting Value = 100)', fontweight='bold')
+        ax.set_xlabel('Date')
+        ax.set_ylabel('Normalized Price')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        
+        # Add horizontal line at 100 (break-even)
+        ax.axhline(y=100, color='black', linestyle='--', alpha=0.5)
+    
+    def create_risk_return_scatter(self, summary_df, ax):
+        """
+        Chart 2: Risk vs Return scatter plot
+        Shows risk-adjusted performance positioning
+        """
+        x = summary_df['Annualized_Vol_%']
+        y = summary_df['Total_Return_%']
+        
+        # Create scatter plot
+        scatter = ax.scatter(x, y, s=100, alpha=0.7, c=summary_df['Current_Sharpe'], 
+                            cmap='RdYlGn', edgecolors='black', linewidth=1)
+        
+        # Add labels for each point
+        for i, ticker in enumerate(summary_df.index):
+            ax.annotate(ticker, (x.iloc[i], y.iloc[i]), 
+                    xytext=(5, 5), textcoords='offset points', 
+                    fontweight='bold', fontsize=10)
+        
+        ax.set_xlabel('Annualized Volatility (%)')
+        ax.set_ylabel('Total Return (%)')
+        ax.set_title('Risk vs Return Analysis\n(Color = Sharpe Ratio)', fontweight='bold')
+        ax.grid(True, alpha=0.3)
+        
+        # Add colorbar
+        cbar = plt.colorbar(scatter, ax=ax)
+        cbar.set_label('Sharpe Ratio', rotation=270, labelpad=15)
+    
+    def create_rolling_sharpe_chart(self, ticker_data, ax):
+        """
+        Chart 3: Rolling Sharpe ratios over time
+        Shows how risk-adjusted performance evolved
+        """
+        for ticker, data in ticker_data.items():
+            clean_data = data.dropna()
+            if len(clean_data) == 0 or 'sharpe_ratio' not in clean_data.columns:
+                continue
+                
+            ax.plot(clean_data.index, clean_data['sharpe_ratio'], 
+                    linewidth=2, label=ticker, alpha=0.8)
+        
+        ax.set_title('Rolling Sharpe Ratios Over Time', fontweight='bold')
+        ax.set_xlabel('Date')
+        ax.set_ylabel('Sharpe Ratio')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        
+        # Add horizontal line at 0 (break-even risk-adjusted return)
+        ax.axhline(y=0, color='red', linestyle='--', alpha=0.7, label='Break-even')
+    
+    def create_metrics_comparison_chart(self, summary_df, ax):
+        """
+        Chart 4: Bar chart comparing key metrics
+        Easy comparison of summary statistics
+        """
+        # Select key metrics for comparison
+        metrics_to_plot = ['Total_Return_%', 'Current_Sharpe']
+        
+        # Create grouped bar chart
+        x_pos = np.arange(len(summary_df.index))
+        width = 0.35
+        
+        # Plot Total Return bars
+        bars1 = ax.bar(x_pos - width/2, summary_df['Total_Return_%'], 
+                    width, label='Total Return (%)', alpha=0.8, color='skyblue')
+        
+        # Create second y-axis for Sharpe ratio
+        ax2 = ax.twinx()
+        bars2 = ax2.bar(x_pos + width/2, summary_df['Current_Sharpe'], 
+                        width, label='Sharpe Ratio', alpha=0.8, color='lightcoral')
+        
+        # Formatting
+        ax.set_xlabel('Stocks')
+        ax.set_ylabel('Total Return (%)', color='skyblue')
+        ax2.set_ylabel('Sharpe Ratio', color='lightcoral')
+        ax.set_title('Performance Metrics Comparison', fontweight='bold')
+        
+        ax.set_xticks(x_pos)
+        ax.set_xticks_labels = summary_df.index
+        ax.tick_params(axis='x', rotation=45)
+        
+        # Add value labels on bars
+        for bar in bars1:
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., height,
+                    f'{height:.1f}%', ha='center', va='bottom', fontsize=9)
+        
+        for bar in bars2:
+            height = bar.get_height()
+            ax2.text(bar.get_x() + bar.get_width()/2., height,
+                    f'{height:.2f}', ha='center', va='bottom', fontsize=9)
+        
+        # Add legends
+        ax.legend(loc='upper left')
+        ax2.legend(loc='upper right')
+    
+    def plot_individual_stock_analysis(self, ticker, data, window=30):
+        """
+        Create detailed analysis for a single stock
+        Useful for deep-dive analysis
+        """
+        fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+        fig.suptitle(f'{ticker} Detailed Performance Analysis', fontsize=16, fontweight='bold')
+        
+        clean_data = data.dropna()
+        
+        # Price and Volume
+        ax1 = axes[0, 0]
+        ax1_vol = ax1.twinx()
+        
+        ax1.plot(clean_data.index, clean_data['Close'], color='blue', linewidth=2, label='Close Price')
+        ax1_vol.bar(clean_data.index, clean_data['Volume'], alpha=0.3, color='gray', label='Volume')
+        
+        ax1.set_title('Price and Volume')
+        ax1.set_ylabel('Price ($)', color='blue')
+        ax1_vol.set_ylabel('Volume', color='gray')
+        ax1.legend(loc='upper left')
+        ax1_vol.legend(loc='upper right')
+        
+        # Returns Distribution
+        axes[0, 1].hist(clean_data['log_returns'] * 100, bins=50, alpha=0.7, edgecolor='black')
+        axes[0, 1].set_title('Log Returns Distribution')
+        axes[0, 1].set_xlabel('Daily Log Returns (%)')
+        axes[0, 1].set_ylabel('Frequency')
+        axes[0, 1].axvline(x=0, color='red', linestyle='--', alpha=0.7)
+        
+        # Rolling Volatility
+        vol_col = f'vol_{window}_annualized'
+        if vol_col in clean_data.columns:
+            axes[1, 0].plot(clean_data.index, clean_data[vol_col] * 100, 
+                        color='red', linewidth=2, label=f'{window}-day Volatility')
+            axes[1, 0].set_title('Rolling Annualized Volatility')
+            axes[1, 0].set_ylabel('Volatility (%)')
+            axes[1, 0].legend()
+            axes[1, 0].grid(True, alpha=0.3)
+        
+        # Sharpe Ratio Over Time
+        if 'sharpe_ratio' in clean_data.columns:
+            axes[1, 1].plot(clean_data.index, clean_data['sharpe_ratio'], 
+                        color='green', linewidth=2, label='Sharpe Ratio')
+            axes[1, 1].set_title('Rolling Sharpe Ratio')
+            axes[1, 1].set_ylabel('Sharpe Ratio')
+            axes[1, 1].axhline(y=0, color='red', linestyle='--', alpha=0.7)
+            axes[1, 1].legend()
+            axes[1, 1].grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        plt.show()
