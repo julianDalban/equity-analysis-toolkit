@@ -343,3 +343,13 @@ class PerformanceAnalyzer:
         
         plt.tight_layout()
         plt.show()
+    
+    def analyze_portfolio(self, symbols: List[str], start_date, end_date, window):
+        '''
+        Complete the full portfolio analysis workflow to test out the full functionality.
+        '''
+        comparison_df, ticker_data = self.compare_performance(
+            symbols, start_date, end_date, window, visualization=True
+        )
+        
+        return comparison_df, ticker_data

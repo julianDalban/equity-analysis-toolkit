@@ -1,1 +1,18 @@
-# API_KEY = P3GEXXI9LB6K6GFQ
+# Environment/secrets
+.env
+*.env
+
+# Python
+__pycache__/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Data and cache
+data_cache/
+*.csv
+*.xlsx
+*.json
+
+# Folders to ignore
+misc/
